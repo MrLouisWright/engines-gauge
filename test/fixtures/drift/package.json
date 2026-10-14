@@ -1,0 +1,8 @@
+{
+  "name": "drift-fixture",
+  "version": "1.0.0",
+  "engines": { "node": ">=16" },
+  "volta": { "node": "14.21.3" },
+  "dependencies": { "fast-lib": "^5.0.0", "fsevents": "^2.3.3" },
+  "devDependencies": { "@types/node": "^22.0.0", "test-runner": "^3.0.0" }
+}
