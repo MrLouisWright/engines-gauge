@@ -1,5 +1,7 @@
 # engines-gauge
 
+[![npm version](https://img.shields.io/npm/v/engines-gauge.svg)](https://www.npmjs.com/package/engines-gauge) [![CI](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml/badge.svg)](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml) [![Node](https://img.shields.io/node/v/engines-gauge.svg)](https://nodejs.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > Make `engines.node`, your CI matrix, `.nvmrc` and your dependencies' engine requirements agree.
 
 `engines.node` is a promise to your users, and it drifts. CI quietly stops testing the minimum you claim. `.nvmrc` pins a version that `engines` forbids. A dependency update starts requiring Node 18.17 while your `package.json` still says `>=16`, so users on 16 get a broken install. `engines-gauge` reads every place a Node.js version is declared, cross-checks them, and reports each mismatch with the file, line, severity and a **concrete fix**.
