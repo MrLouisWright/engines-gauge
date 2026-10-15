@@ -1,11 +1,12 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { satisfies, minVersion, validRange, parseRange } from './range.js';
-import { versionFiles, workflowVersions, dependencyEngines } from './sources.js';
+import { versionFiles, workflowVersions, dependencyEngines, extraVersionSources, packageManagerInfo } from './sources.js';
+import { writeFileSync } from 'node:fs';
 import { toMajor, isEol, RELEASES, latestLts, currentMajor } from './node-releases.js';
 import { buildReport, UsageError } from './core.js';
 
-export { satisfies, minVersion, toMajor, isEol, latestLts, currentMajor, RELEASES, versionFiles, workflowVersions, dependencyEngines };
+export { satisfies, minVersion, toMajor, isEol, latestLts, currentMajor, RELEASES, versionFiles, workflowVersions, dependencyEngines, extraVersionSources, packageManagerInfo };
 export * from './core.js';
 
 export const RULES = {
@@ -19,6 +20,12 @@ export const RULES = {
   'dev-dependency-engines-conflict': { severity: 'low', title: 'A dev dependency needs a newer Node.js than CI or engines minimum' },
   'types-node-ahead': { severity: 'low', title: '@types/node is newer than the minimum supported Node.js' },
   'ci-missing-pinned': { severity: 'low', title: 'CI does not test the version pinned in .nvmrc' },
+  'package-manager-invalid': { severity: 'high', title: 'packageManager is not "<name>@<x.y.z>"' },
+  'package-manager-lockfile-mismatch': { severity: 'high', title: 'packageManager names a different tool, or a version that cannot read the lockfile' },
+  'multiple-lockfiles': { severity: 'medium', title: 'More than one package manager lockfile' },
+  'package-manager-engines-conflict': { severity: 'medium', title: 'packageManager version is outside engines.npm / engines.pnpm / engines.yarn' },
+  'dependabot-cap-below-engines': { severity: 'low', title: 'Dependabot ignore rule caps Node below what engines.node allows' },
+  'engines-lower-than-needed': { severity: 'info', title: 'engines.node is lower than the minimum your dependencies need (suggestion)' },
   'engines-eol': { severity: 'info', title: 'engines.node allows an end-of-life Node.js version' },
   'ci-eol': { severity: 'info', title: 'CI tests an end-of-life Node.js version' },
 };
@@ -39,7 +46,8 @@ export function analyze(dir, opts = {}) {
   const add = (rule, subject, message, fix, loc = {}) => findings.push({ rule, severity: RULES[rule].severity, subject, file: loc.file || 'package.json', line: loc.line, message, fix });
   const engines = pkg.engines?.node;
   const ci = workflowVersions(dir).filter((x) => opts.ci !== false);
-  const pins = versionFiles(dir, pkg);
+  const extra = extraVersionSources(dir, pkg);
+  const pins = [...versionFiles(dir, pkg), ...extra.filter((x) => x.source !== 'dependabot')];
   const deps = dependencyEngines(dir, pkg);
   const ignored = (n) => (opts.ignoreDeps || []).some((g) => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$').test(n));
   const info = { engines: engines ?? null, ci: [], pins: pins.map((p) => ({ source: p.source, spec: p.spec })), depSource: deps.source, requiredByDeps: null };
@@ -108,6 +116,22 @@ export function analyze(dir, opts = {}) {
     const eolMajors = majorsIn(range, min.major, Math.max(min.major, currentMajor(now))).filter((M) => M % 2 === 0 && isEol(M, now));
     if (eolMajors.length) add('engines-eol', `node@${eolMajors[0]}`, `engines.node "${range}" allows end-of-life Node ${eolMajors.join(', ')}`, `Consider ">=${Math.max(...eolMajors) + (Math.max(...eolMajors) % 2 ? 1 : 2)}" in your next major release.`, { line: lineOf('engines') });
   }
+  // Dependabot caps
+  if (range) for (const d of extra.filter((x) => x.source === 'dependabot')) if (majorsIn(range, minVersion(range).major, currentMajor(now)).some((M) => M >= d.cap)) add('dependabot-cap-below-engines', 'dependabot', `${d.file} ignores Node/@types/node >= ${d.cap}, but engines.node "${range}" allows newer majors`, 'Lift the ignore rule, or cap engines.node to match.', { file: d.file, line: d.line });
+  // suggested lowest engines range (ls-engines style)
+  info.suggested = need ? `>=${vstr(need)}` : null;
+  if (range && need && !satisfies(vstr(minVersion(range)), `>=${vstr(need)}`) && !prodConflicts.length) add('engines-lower-than-needed', 'engines', `Dependencies need Node >= ${vstr(need)} but engines.node is "${range}"`, `Run engines-gauge --save to set "engines.node": ">=${vstr(need)}".`, { line: lineOf('engines') });
+  // packageManager / corepack vs lockfiles
+  const pmi = packageManagerInfo(dir, pkg); info.packageManager = pmi.field;
+  if (pmi.locks.length > 1) add('multiple-lockfiles', 'lockfiles', `Found ${pmi.locks.map((l) => l.file).join(', ')}`, 'Keep only the lockfile for the package manager you use.', { file: pmi.locks[1].file });
+  if (!pmi.valid) add('package-manager-invalid', 'packageManager', `packageManager "${pmi.field}" is not of the form "<npm|pnpm|yarn|bun>@<x.y.z>" (corepack needs an exact version)`, 'Run "corepack use <pm>@<version>".', { line: lineOf('packageManager') });
+  else if (pmi.pm) {
+    const lock = pmi.locks.find((l) => l.pm === pmi.pm);
+    if (pmi.locks.length && !lock) add('package-manager-lockfile-mismatch', 'packageManager', `packageManager is ${pmi.field} but the lockfile is ${pmi.locks.map((l) => l.file).join(', ')}`, `Switch packageManager to the tool that wrote the lockfile, or regenerate the lockfile with ${pmi.pm}.`, { line: lineOf('packageManager') });
+    else if (lock && (pmi.version.major < lock.minMajor || (lock.maxMajor != null && pmi.version.major > lock.maxMajor))) add('package-manager-lockfile-mismatch', 'packageManager', `${lock.file} (lockfileVersion ${lock.lockfileVersion}) needs ${pmi.pm} ${lock.maxMajor != null && lock.maxMajor !== lock.minMajor ? `${lock.minMajor}–${lock.maxMajor}` : `>= ${lock.minMajor}`}, but packageManager pins ${pmi.field}`, `Regenerate the lockfile with ${pmi.field}, or update packageManager ("corepack use ${pmi.pm}@<version>").`, { line: lineOf('packageManager') });
+    const er = pkg.engines?.[pmi.pm];
+    if (er && validRange(er) && !satisfies(vstr(pmi.version), er)) add('package-manager-engines-conflict', `engines.${pmi.pm}`, `packageManager pins ${pmi.field} but engines.${pmi.pm} is "${er}"`, `Make engines.${pmi.pm} allow ${vstr(pmi.version)}, or change packageManager.`, { line: lineOf('packageManager') });
+  }
   for (const c of ciMajors) if (isEol(c.major, now)) add('ci-eol', `node@${c.major}`, `CI tests Node ${c.spec}, which reached end-of-life on ${RELEASES[c.major]?.eol ?? 'an earlier date'}`, 'Keep it only while engines.node still claims it.', { file: c.file, line: c.line });
   // dedupe same rule+subject+file
   const seen = new Set();
@@ -122,3 +146,18 @@ export function check(dir, opts = {}, config = {}, configFile) {
   return buildReport(tool, `${pkg.name || 'package'}${pkg.version ? '@' + pkg.version : ''}`, findings, config, { now: opts.now, configFile, summaryLine: line, info });
 }
 void parseRange;
+
+/** Lowest engines.node range your production dependencies allow (like ls-engines), or null. */
+export function suggestEngines(dir, opts = {}) { return analyze(dir, opts).info.suggested; }
+
+/** Write the suggested range to package.json engines.node. Returns { from, to } or null when nothing to do. */
+export function saveEngines(dir, opts = {}) {
+  const to = suggestEngines(dir, opts); if (!to) return null;
+  const file = join(dir, 'package.json'); const text = readFileSync(file, 'utf8'); const pkg = JSON.parse(text);
+  const from = pkg.engines?.node ?? null; if (from === to) return null;
+  if (from && validRange(from) && satisfies(vstr(minVersion(from)), to) && !opts.force) return null; // already at or above what deps need
+  pkg.engines = { ...(pkg.engines || {}), node: to };
+  const indent = /^[ \t]+/m.exec(text)?.[0] || '  ';
+  writeFileSync(file, JSON.stringify(pkg, null, indent) + (text.endsWith('\n') ? '\n' : ''));
+  return { from, to };
+}

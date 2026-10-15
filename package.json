@@ -2,33 +2,6 @@
   "name": "engines-gauge",
   "version": "1.0.0",
   "description": "Make engines.node, your CI matrix, .nvmrc/.node-version/.tool-versions/Volta/Dockerfile and your dependencies' engine requirements agree: untested minimum versions, CI versions outside engines, deps that need a newer Node, EOL versions. Text/JSON/SARIF/Markdown, allowlist with expiry, GitHub Action. Zero deps.",
-  "type": "module",
-  "main": "./src/index.js",
-  "types": "./src/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "bin": {
-    "engines-gauge": "bin/engines-gauge.js"
-  },
-  "files": [
-    "src",
-    "bin",
-    "action.yml",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE"
-  ],
-  "engines": {
-    "node": ">=18"
-  },
-  "scripts": {
-    "test": "node --test test/*.test.js"
-  },
   "keywords": [
     "engines",
     "node-version",
@@ -54,5 +27,50 @@
   "bugs": {
     "url": "https://github.com/MrLouisWright/engines-gauge/issues"
   },
-  "homepage": "https://mrlouiswright.github.io/engines-gauge/"
+  "homepage": "https://mrlouiswright.github.io/engines-gauge/",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./src/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./src/index.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "engines-gauge": "bin/engines-gauge.js"
+  },
+  "files": [
+    "src",
+    "dist",
+    "bin",
+    "action.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.25.12",
+    "typescript": "^5.9.3"
+  }
 }

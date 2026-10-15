@@ -92,3 +92,40 @@ export function dependencyEngines(dir, pkg) {
   }
   return { source: null, deps: out };
 }
+
+const stripJsonc = (s) => s.replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m, str) => str || '').replace(/,(\s*[}\]])/g, '$1');
+const jsonc = (s) => { try { return JSON.parse(stripJsonc(s)); } catch { return null; } };
+const lineIn = (text, needle) => { const i = text.split(/\r?\n/).findIndex((l) => l.includes(needle)); return i === -1 ? undefined : i + 1; };
+
+/** Node versions from dev containers and Renovate config: [{ source, file, line, spec }] */
+export function extraVersionSources(dir, pkg) {
+  const out = [];
+  for (const f of ['.devcontainer/devcontainer.json', '.devcontainer.json']) {
+    const t = read(join(dir, f)); if (!t) continue; const j = jsonc(t); if (!j) continue;
+    const img = typeof j.image === 'string' ? /(?:javascript|typescript)-node:(?:\d+-)?(\d+(?:\.\d+){0,2})|(?:^|\/)node:(\d+(?:\.\d+){0,2})/.exec(j.image) : null;
+    if (img) out.push({ source: 'devcontainer', file: f, line: lineIn(t, '"image"'), spec: img[1] || img[2] });
+    for (const [k, v] of Object.entries(j.features || {})) if (/devcontainers\/features\/node(:|$)/.test(k) && v && typeof v === 'object' && v.version && !/^(lts|latest|none)$/.test(String(v.version))) out.push({ source: 'devcontainer', file: f, line: lineIn(t, 'features/node'), spec: String(v.version) });
+  }
+  const ren = [['renovate.json', null], ['renovate.json5', null], ['.renovaterc', null], ['.renovaterc.json', null], ['.github/renovate.json', null], ['.github/renovate.json5', null]];
+  for (const [f] of ren) { const t = read(join(dir, f)); if (!t) continue; const j = jsonc(t); const n = j?.constraints?.node; if (n) out.push({ source: 'renovate', file: f, line: lineIn(t, '"node"') || lineIn(t, 'node:'), spec: String(n) }); }
+  if (pkg?.renovate?.constraints?.node) out.push({ source: 'renovate', file: 'package.json', spec: String(pkg.renovate.constraints.node) });
+  // Dependabot: an "ignore" rule for the node docker image / @types/node with versions [">= N"] caps what it will propose
+  const db = read(join(dir, '.github/dependabot.yml')) || read(join(dir, '.github/dependabot.yaml'));
+  if (db) { const lines = db.split(/\r?\n/); lines.forEach((l, i) => { if (/dependency-name:\s*['"]?(node|@types\/node)['"]?\s*$/.test(l)) for (let k = i + 1; k < Math.min(lines.length, i + 6); k++) { const m = /['"]?>=?\s*(\d+)(?:\.[\dx*]+)*['"]?/.exec(lines[k]); if (/versions?:|^\s*-/.test(lines[k]) && m) { out.push({ source: 'dependabot', file: '.github/dependabot.yml', line: k + 1, spec: `<${m[1]}`, cap: Number(m[1]) }); break; } } }); }
+  return out;
+}
+
+/** packageManager field, lockfiles and their implied package-manager versions. */
+export function packageManagerInfo(dir, pkg) {
+  const pmField = typeof pkg?.packageManager === 'string' ? pkg.packageManager : null;
+  const m = pmField ? /^(npm|pnpm|yarn|bun)@(\d+)\.(\d+)\.(\d+)(?:[-+][\w.+-]*)?$/.exec(pmField) : null;
+  const locks = [];
+  const npm = read(join(dir, 'package-lock.json')) || read(join(dir, 'npm-shrinkwrap.json'));
+  if (npm) { let v = null; try { v = JSON.parse(npm).lockfileVersion; } catch { /* */ } locks.push({ pm: 'npm', file: 'package-lock.json', lockfileVersion: v, minMajor: v >= 2 ? 7 : 5, maxMajor: v === 1 ? 6 : undefined }); }
+  const pnpm = read(join(dir, 'pnpm-lock.yaml'));
+  if (pnpm) { const v = /^lockfileVersion:\s*['"]?([\d.]+)/m.exec(pnpm)?.[1]; const f = parseFloat(v); const minMajor = f >= 9 ? 9 : f >= 6 ? 8 : f >= 5.4 ? 7 : f >= 5.3 ? 6 : 5; locks.push({ pm: 'pnpm', file: 'pnpm-lock.yaml', lockfileVersion: v, minMajor, maxMajor: f >= 9 ? undefined : f >= 6 ? 8 : 7 }); }
+  const yarn = read(join(dir, 'yarn.lock'));
+  if (yarn) { const berry = /^__metadata:/m.test(yarn); locks.push({ pm: 'yarn', file: 'yarn.lock', lockfileVersion: berry ? 'berry' : '1', minMajor: berry ? 2 : 1, maxMajor: berry ? undefined : 1 }); }
+  if (existsSync(join(dir, 'bun.lockb')) || existsSync(join(dir, 'bun.lock'))) locks.push({ pm: 'bun', file: existsSync(join(dir, 'bun.lock')) ? 'bun.lock' : 'bun.lockb', minMajor: 1 });
+  return { field: pmField, valid: !pmField || !!m, pm: m?.[1] ?? null, version: m ? { major: +m[2], minor: +m[3], patch: +m[4] } : null, locks };
+}

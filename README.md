@@ -1,6 +1,6 @@
 # engines-gauge
 
-[![npm version](https://img.shields.io/npm/v/engines-gauge.svg)](https://www.npmjs.com/package/engines-gauge) [![CI](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml/badge.svg)](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml) [![Node](https://img.shields.io/node/v/engines-gauge.svg)](https://nodejs.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/engines-gauge.svg)](https://www.npmjs.com/package/engines-gauge) [![CI](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml/badge.svg)](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml) [![Node](https://img.shields.io/node/v/engines-gauge.svg)](https://nodejs.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![provenance](https://img.shields.io/badge/npm-provenance-blue)](https://docs.npmjs.com/generating-provenance-statements)
 
 > Make `engines.node`, your CI matrix, `.nvmrc` and your dependencies' engine requirements agree.
 
@@ -193,3 +193,33 @@ Free to use under MIT, no attribution required. If engines-gauge helps you, a li
 ## Licence
 
 MIT © Louis Wright ([Louis Wright](https://github.com/MrLouisWright))
+
+## Suggest a range, more sources, packageManager
+
+```bash
+npx engines-gauge --suggest   # prints the lowest engines.node your production dependencies allow
+npx engines-gauge --save      # writes it to package.json (never lowers an existing range)
+```
+
+Node versions are also read from:
+
+- `.devcontainer/devcontainer.json` (`image: …/typescript-node:1-20`, `features["ghcr.io/devcontainers/features/node:1"].version`)
+- Renovate `constraints.node` (`renovate.json`, `.renovaterc`, `.github/renovate.json5`, `"renovate"` in package.json)
+- Dependabot `ignore` rules that cap `node` / `@types/node` (`dependabot-cap-below-engines`)
+- setup-node `node-version-file` (as before)
+
+`packageManager` (corepack) is checked against the lockfile: the right tool, an exact version, a version that can read the lockfile's `lockfileVersion` (npm lockfile v2/v3 needs npm 7+, pnpm lockfile 9.0 needs pnpm 9, a Yarn Berry lockfile needs Yarn 2+), and agreement with `engines.npm` / `engines.pnpm` / `engines.yarn`. More than one lockfile is reported too.
+
+engines-gauge owns every `engines` check in Louis Wright's package set; pkg-field-gauge leaves `engines` alone.
+
+## Module formats and types
+
+Ships ESM (`import`) and a bundled CommonJS build (`require`), with TypeScript declarations generated from the source:
+
+```js
+import * as lib from 'engines-gauge';      // ESM
+const lib = require('engines-gauge');      // CommonJS
+```
+
+Tests live in [`test/`](test) and run on Node 18, 20 and 22 in [GitHub Actions](https://github.com/MrLouisWright/engines-gauge/actions/workflows/ci.yml), including a require+import check. Releases are published with `npm publish --provenance`.
+
