@@ -1,8 +1,10 @@
 # Changelog
 
-## 1.0.0 (2026-10-15)
+## 1.1.0 (2026-10-17)
 
-### Added before first publish
+Re-release: these changes were committed after 1.0.0 was published but never reached npm. 1.0.0 on npm is the original first release.
+
+### Added
 
 - `--suggest` / `--save` (like ls-engines): work out the lowest `engines.node` your production dependencies allow and write it to package.json (only ever raises it). Library: `suggestEngines(dir)`, `saveEngines(dir)`. New info rule `engines-lower-than-needed`.
 - More Node version sources: dev containers (`.devcontainer/devcontainer.json` image tag and the `features/node` version), Renovate `constraints.node` (renovate.json/json5, .renovaterc, `.github/`, package.json), and Dependabot ignore rules that cap `node`/`@types/node` (`dependabot-cap-below-engines`). setup-node `node-version-file` was already supported.
@@ -14,6 +16,8 @@
 - Dual ESM + CommonJS: `import` loads `src/`, `require` loads a bundled `dist/index.cjs`, via package.json `exports`.
 - TypeScript declarations are generated from the source (`dist/types`) instead of hand-written.
 - CI runs build, tests and a require+import check on Node 18/20/22; releases use `npm publish --provenance`.
+
+## 1.0.0 (2026-10-15)
 
 First release, by Louis Wright.
 

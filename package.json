@@ -1,6 +1,6 @@
 {
   "name": "engines-gauge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Make engines.node, your CI matrix, .nvmrc/.node-version/.tool-versions/Volta/Dockerfile and your dependencies' engine requirements agree: untested minimum versions, CI versions outside engines, deps that need a newer Node, EOL versions. Text/JSON/SARIF/Markdown, allowlist with expiry, GitHub Action. Zero deps.",
   "keywords": [
     "engines",
