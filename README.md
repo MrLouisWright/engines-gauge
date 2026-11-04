@@ -77,7 +77,7 @@ INFO     package.json:4 engines.node ">=16" allows end-of-life Node 16, 18, 20 [
 ## Options
 
 ```text
-engines-gauge 1.0.0 — make engines.node, the CI matrix, .nvmrc and dependency engines agree
+engines-gauge 1.1.0 — make engines.node, the CI matrix, .nvmrc and dependency engines agree
 
 Usage: engines-gauge [dir] [options]
 
@@ -85,6 +85,8 @@ Checks
       --ignore-deps <globs>   Dependencies whose engines are ignored (comma-separated)
       --strict-minimum        Require CI to test the engines minimum even if it is end-of-life
       --require-engines       Report missing engines.node even for private packages
+      --suggest               Print the lowest engines.node range your dependencies allow (to stderr)
+      --save                  Write that range to package.json engines.node (only raises it)
 
 Common
   -c, --config <file>     JSON config (default: .engines-gauge.json or "enginesGauge" in package.json)
@@ -160,6 +162,12 @@ jobs:
 The action runs the bundled CLI with Node 20; it has no dependencies to install. Pin it to a commit SHA if your policy requires it.
 
 ## Library
+
+Install it in your project first:
+
+```bash
+npm install --save-dev engines-gauge
+```
 
 ```js
 import { check, toMajor, satisfies } from 'engines-gauge';
